@@ -313,6 +313,63 @@ public final class GameIntrospector {
         return result;
     }
 
+    /**
+     * Read-only reflection dump of the tile entity at the target (or looked-at) block, plus — for a GregTech machine —
+     * its meta tile entity. Surfaces state the bespoke tools don't expose (e.g. {@code isAllowedToWork}, {@code
+     * motorTier}, module lists). See {@link ReflectiveInspector} for the read-only guarantees.
+     *
+     * @param coords explicit [x, y, z], or {@code null} to use the looked-at block.
+     * @return the block identity plus a {@code tileEntity} dump and, when applicable, a {@code metaTileEntity} dump.
+     * @throws McpToolException if no world/target is available.
+     */
+    public Map<String, Object> inspectObject(int[] coords) throws McpToolException {
+        World world = requireWorld();
+        int x;
+        int y;
+        int z;
+        if (coords != null) {
+            x = coords[0];
+            y = coords[1];
+            z = coords[2];
+        } else {
+            Minecraft mc = Minecraft.getMinecraft();
+            MovingObjectPosition hit = mc.objectMouseOver;
+            if (hit == null || hit.typeOfHit != MovingObjectPosition.MovingObjectType.BLOCK) {
+                throw new McpToolException("Provide coordinates, or point your crosshair at the block to inspect.");
+            }
+            x = hit.blockX;
+            y = hit.blockY;
+            z = hit.blockZ;
+        }
+
+        Map<String, Object> result = new LinkedHashMap<String, Object>();
+        result.put("position", intList(x, y, z));
+        Block block = world.getBlock(x, y, z);
+        result.put("block", blockRegistryName(block));
+        result.put("blockDisplayName", safeBlockName(block));
+
+        TileEntity te = world.getTileEntity(x, y, z);
+        if (te == null) {
+            result.put("hasTileEntity", Boolean.FALSE);
+            return result;
+        }
+        result.put("hasTileEntity", Boolean.TRUE);
+        result.put("tileEntity", ReflectiveInspector.inspect(te));
+
+        // For a GregTech tile, the interesting state lives on the meta tile entity (the controller logic object).
+        if (gregTechLoaded && Reflect.isInstance("gregtech.api.interfaces.tileentity.IGregTechTileEntity", te)) {
+            try {
+                Object mte = Reflect.invoke(te, "getMetaTileEntity");
+                if (mte != null) {
+                    result.put("metaTileEntity", ReflectiveInspector.inspect(mte));
+                }
+            } catch (McpToolException ignored) {
+                // Best-effort; the base tile dump above is still returned.
+            }
+        }
+        return result;
+    }
+
     // ---- shared helpers -------------------------------------------------------------------------------------------
 
     private Map<String, Object> describeBlock(World world, int x, int y, int z) {

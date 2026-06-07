@@ -14,6 +14,7 @@ import com.twodcube.gtnhmcp.mcp.tools.DiagnoseMultiblockTool;
 import com.twodcube.gtnhmcp.mcp.tools.GetInventoryTool;
 import com.twodcube.gtnhmcp.mcp.tools.GetPlayerTool;
 import com.twodcube.gtnhmcp.mcp.tools.GetTargetTool;
+import com.twodcube.gtnhmcp.mcp.tools.InspectObjectTool;
 import com.twodcube.gtnhmcp.mcp.tools.ReadRegionTool;
 import com.twodcube.gtnhmcp.mcp.tools.ScanBlocksTool;
 
@@ -36,8 +37,10 @@ public class ClientProxy extends CommonProxy {
         + "block the player is looking at (includes a GregTech controller's front facing); 'diagnose_multiblock' to "
         + "find out why a GregTech multiblock is not forming or not running; 'scan_blocks' to tally block types around "
         + "a controller; 'read_region' to read the EXACT block at every coordinate in a box (use this, not scan_blocks, "
-        + "to verify a structure cell-by-cell against its required pattern); 'get_player' and 'get_inventory' for "
-        + "context. Everything is read-only and only returns data while the player is in a world.";
+        + "to verify a structure cell-by-cell against its required pattern); 'inspect_object' for a generic read-only "
+        + "reflection dump of a tile entity's fields and getters (to read state no other tool exposes, e.g. "
+        + "isAllowedToWork or motorTier); 'get_player' and 'get_inventory' for context. Everything is read-only and "
+        + "only returns data while the player is in a world.";
 
     private McpHttpServer server;
 
@@ -57,6 +60,7 @@ public class ClientProxy extends CommonProxy {
         registry.register(new DiagnoseMultiblockTool(executor, introspector));
         registry.register(new ScanBlocksTool(executor, introspector));
         registry.register(new ReadRegionTool(executor, introspector));
+        registry.register(new InspectObjectTool(executor, introspector));
         registry.register(new GetPlayerTool(executor, introspector));
         registry.register(new GetInventoryTool(executor, introspector));
 
