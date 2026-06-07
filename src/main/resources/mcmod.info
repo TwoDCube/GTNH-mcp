@@ -1,0 +1,21 @@
+{
+	"modListVersion": 2,
+	"modList": [{
+		"modid": "${modId}",
+		"name": "${modName}",
+		"description": "A client-side mod that embeds a local Model Context Protocol (MCP) server, letting an AI assistant inspect the running GregTech New Horizons client to help diagnose multiblocks, blocks, inventory and player state. Read-only; binds to localhost only.",
+		"version": "${modVersion}",
+		"mcversion": "${minecraftVersion}",
+		"url": "https://github.com/twodcube/GTNHMCP",
+		"updateUrl": "",
+		"authorList": ["twodcube"],
+		"credits": "Built on the GTNH ExampleMod template.",
+		"logoFile": "",
+		"screenshots": [],
+		"parent": "",
+		"requiredMods": [],
+		"dependencies": [],
+		"dependants": [],
+		"useDependencyInformation": false
+	}]
+}

@@ -1,0 +1,10 @@
+// Custom build logic that survives `./gradlew updateBuildscript` (do not hand-edit build.gradle.kts).
+//
+// The GTNH convention does not enable the JUnit Platform on the `test` task, so our JUnit 5 (Jupiter) tests are not
+// discovered without this. Mirrors the pattern used by sibling repos (e.g. StructureLib).
+test {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
+    }
+}
