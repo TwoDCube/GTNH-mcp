@@ -5,9 +5,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import net.minecraft.block.Block;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.StatCollector;
+import net.minecraft.world.World;
 
 import com.twodcube.gtnhmcp.mcp.protocol.McpToolException;
+
+import cpw.mods.fml.common.registry.GameRegistry;
 
 /**
  * GregTech-aware multiblock inspection, implemented entirely via {@link Reflect} so this class carries no compile-time
@@ -90,7 +97,11 @@ final class MultiblockInspector {
                     + "' is a GregTech machine but not a multiblock controller. Diagnosis applies to multiblock "
                     + "controllers; use get_target to inspect this block instead.");
         }
-        return buildDiagnosis(te, mte, machineName);
+        Map<String, Object> result = buildDiagnosis(te, mte, machineName);
+        // buildDiagnosis is Minecraft-free (testable); enrich the structure errors with live world/item/lang lookups
+        // here, where the client world and item registry are available.
+        enrichStructureErrors(result, te);
+        return result;
     }
 
     /**
@@ -149,13 +160,19 @@ final class MultiblockInspector {
         result.put("energy", energy);
 
         result.put("scannerInfo", toList(Reflect.invokeStringArray(baseTile, "getInfoData")));
-        result.put("summary", buildSummary(formed, active, ideal - repair, toolsNeeded));
+
+        // The real reasons a structure won't form: GregTech populates this list during its structure check and syncs it
+        // to the client (while the GUI is open). Reading it lets us report exact causes instead of guessing.
+        List<Object> structureErrors = extractStructureErrors(mte);
+        result.put("structureErrors", structureErrors);
+        result.put("summary", buildSummary(formed, active, ideal - repair, toolsNeeded, structureErrors));
         result.put(
             "freshnessNote",
-            "Structure, maintenance, progress and efficiency are synced to the client most reliably while the "
-                + "controller's GUI is open. If a value looks stale, open the controller GUI once and re-run. The energy "
-                + "figures are the controller tile's own buffer; a multiblock's real energy lives in its energy hatches "
-                + "and may read as 0 here.");
+            "Structure status, the structure-error list, maintenance, progress and efficiency are synced to the client "
+                + "most reliably while the controller's GUI is open. If the structure is not formed but no structure "
+                + "errors are listed, open the controller GUI once and re-run to sync them. The energy figures are the "
+                + "controller tile's own buffer; a multiblock's real energy lives in its energy hatches and may read as "
+                + "0 here.");
         return result;
     }
 
@@ -167,18 +184,35 @@ final class MultiblockInspector {
         }
     }
 
-    private static List<Object> buildSummary(boolean formed, boolean active, int problems, List<Object> toolsNeeded) {
+    private static List<Object> buildSummary(boolean formed, boolean active, int problems, List<Object> toolsNeeded,
+        List<Object> structureErrors) {
         List<Object> summary = new ArrayList<Object>();
         if (!formed) {
-            summary.add(
-                "The structure is NOT formed — the multiblock has not assembled. Common causes: a wrong or misplaced "
-                    + "block, a missing/incorrect hatch or bus, an air gap, the controller facing the wrong way, or the "
-                    + "wrong tier of casing. Use scan_blocks around the controller and compare against the required "
-                    + "structure for this machine.");
+            if (!structureErrors.isEmpty()) {
+                summary.add(
+                    "The structure is NOT formed. GregTech reports " + structureErrors.size()
+                        + " structure problem(s):");
+                for (Object error : structureErrors) {
+                    if (error instanceof Map) {
+                        Object reason = ((Map<?, ?>) error).get("reason");
+                        if (reason != null) {
+                            summary.add("• " + reason);
+                        }
+                    }
+                }
+            } else {
+                summary.add(
+                    "The structure is NOT formed, and no detailed structure errors are currently synced to the client. "
+                        + "Open the controller's GUI once so the errors sync, then re-run. (Common causes: a wrong or "
+                        + "misplaced block, a missing hatch or bus, an air gap, the wrong casing tier, or the controller "
+                        + "facing the wrong way.)");
+            }
         } else {
             summary.add("The structure IS formed.");
         }
-        if (problems > 0) {
+        // Maintenance flags are only meaningful once the structure is formed (before that they read as defaults), so
+        // only surface maintenance in the summary for a formed machine.
+        if (formed && problems > 0) {
             summary.add(
                 problems + " maintenance problem(s) detected. Apply these tools to the maintenance hatch: "
                     + join(toolsNeeded)
@@ -195,6 +229,168 @@ final class MultiblockInspector {
             summary.add("The machine is currently running.");
         }
         return summary;
+    }
+
+    /**
+     * Read GregTech's {@code structureErrors} list off the controller and turn each {@code StructureError} into a small
+     * descriptive map. Reflection-only and Minecraft-free so it stays unit-testable; world/item enrichment happens
+     * later
+     * in {@link #enrichStructureErrors}.
+     *
+     * @param mte the {@code MTEMultiBlockBase} (or a fake exposing a {@code structureErrors} field) to read.
+     * @return one map per structure error (each with at least {@code id} and {@code reason}); empty when none.
+     * @throws McpToolException if the {@code structureErrors} field cannot be read.
+     */
+    private static List<Object> extractStructureErrors(Object mte) throws McpToolException {
+        Object raw = Reflect.getObjectField(mte, "structureErrors");
+        List<Object> out = new ArrayList<Object>();
+        if (raw instanceof List) {
+            for (Object error : (List<?>) raw) {
+                if (error != null) {
+                    out.add(describeStructureError(error));
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Describe one GregTech {@code StructureError} by its {@code StructureErrorId} plus the data its record carries
+     * (read via reflective accessors). Produces a stable {@code id} and a human {@code reason}, degrading gracefully if
+     * a
+     * detail cannot be read.
+     */
+    private static Map<String, Object> describeStructureError(Object error) {
+        Map<String, Object> m = new LinkedHashMap<String, Object>();
+        String id;
+        try {
+            id = String.valueOf(Reflect.invoke(error, "getId"));
+        } catch (McpToolException e) {
+            id = "UNKNOWN_STRUCTURE_ERROR";
+        }
+        m.put("id", id);
+        try {
+            if ("MISSING_MAINTENANCE".equals(id)) {
+                m.put("reason", "Missing maintenance hatch.");
+            } else if ("MISSING_MUFFLER".equals(id)) {
+                m.put("reason", "Missing muffler hatch.");
+            } else if ("UNNEEDED_MUFFLER".equals(id)) {
+                m.put("reason", "Has a muffler hatch, but this machine doesn't need one.");
+            } else if ("BLOCK_NOT_LOADED".equals(id)) {
+                m.put("reason", "Part of the structure is in an unloaded chunk — move closer and recheck.");
+            } else if ("MISSING_STRUCTURE_WRAPPER_CASINGS".equals(id)) {
+                m.put("reason", "Missing required structure casings.");
+            } else if ("MISSING_OUTPUT_HATCH_DT".equals(id)) {
+                int layer = Reflect.invokeInt(error, "layer");
+                m.put("layer", Integer.valueOf(layer));
+                m.put("reason", "Missing an output hatch on distillation-tower layer " + layer + ".");
+            } else if ("TOO_FEW_CASINGS".equals(id)) {
+                int current = Reflect.invokeInt(error, "current");
+                int required = Reflect.invokeInt(error, "required");
+                m.put("current", Integer.valueOf(current));
+                m.put("required", Integer.valueOf(required));
+                m.put("reason", "Too few casings: have " + current + ", need " + required + ".");
+            } else if ("TOO_MANY_HATCHES".equals(id)) {
+                m.put("itemId", Integer.valueOf(Reflect.invokeInt(error, "itemId")));
+                m.put("itemMeta", Integer.valueOf(Reflect.invokeInt(error, "itemMeta")));
+                int max = Reflect.invokeInt(error, "max");
+                m.put("max", Integer.valueOf(max));
+                m.put("reason", "Too many of a hatch type (maximum " + max + ").");
+            } else if ("MISSING_HATCH".equals(id)) {
+                m.put("itemId", Integer.valueOf(Reflect.invokeInt(error, "itemId")));
+                m.put("itemMeta", Integer.valueOf(Reflect.invokeInt(error, "itemMeta")));
+                m.put("reason", "Missing a required hatch or bus.");
+            } else if ("WRONG_BLOCK".equals(id)) {
+                int x = Reflect.invokeInt(error, "x");
+                int y = Reflect.invokeInt(error, "y");
+                int z = Reflect.invokeInt(error, "z");
+                m.put("position", intList(x, y, z));
+                m.put("reason", "Wrong block at " + x + ", " + y + ", " + z + ".");
+            } else if ("SIMPLE_STRUCTURE_ERROR".equals(id)) {
+                String langKey = Reflect.invokeString(error, "langKey");
+                m.put("langKey", langKey);
+                m.put("reason", langKey);
+            } else {
+                m.put("reason", "Structure error: " + id);
+            }
+        } catch (McpToolException e) {
+            m.put("reason", "Structure error: " + id + " (could not read details: " + e.getMessage() + ")");
+        }
+        return m;
+    }
+
+    /**
+     * Best-effort enrichment of the structure-error maps using the live client world and item registry: resolves the
+     * actual block at a {@code WRONG_BLOCK} coordinate, the item name of a missing/excess hatch, and the localized text
+     * of a {@code SIMPLE_STRUCTURE_ERROR}. Any failure leaves the base {@code reason} untouched.
+     *
+     * @param result the diagnosis map (its {@code structureErrors} entry is mutated in place).
+     * @param te     the controller tile, used to reach the world.
+     */
+    private static void enrichStructureErrors(Map<String, Object> result, TileEntity te) {
+        Object raw = result.get("structureErrors");
+        if (!(raw instanceof List)) {
+            return;
+        }
+        World world = te.getWorldObj();
+        for (Object entry : (List<?>) raw) {
+            if (entry instanceof Map) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> error = (Map<String, Object>) entry;
+                    enrichOneError(error, world);
+                } catch (RuntimeException ignored) {
+                    // Enrichment is optional; the base reason already describes the problem.
+                }
+            }
+        }
+    }
+
+    private static void enrichOneError(Map<String, Object> error, World world) {
+        String id = String.valueOf(error.get("id"));
+        if ("WRONG_BLOCK".equals(id) && world != null && error.get("position") instanceof List) {
+            List<?> pos = (List<?>) error.get("position");
+            int x = ((Number) pos.get(0)).intValue();
+            int y = ((Number) pos.get(1)).intValue();
+            int z = ((Number) pos.get(2)).intValue();
+            Block block = world.getBlock(x, y, z);
+            String name = block == null ? "air" : block.getLocalizedName();
+            error.put("currentBlock", name);
+            error.put("currentBlockMetadata", Integer.valueOf(world.getBlockMetadata(x, y, z)));
+            GameRegistry.UniqueIdentifier uid = block == null ? null : GameRegistry.findUniqueIdentifierFor(block);
+            if (uid != null) {
+                error.put("currentBlockId", uid.modId + ":" + uid.name);
+            }
+            error.put("reason", "Wrong block at " + x + ", " + y + ", " + z + " (currently: " + name + ").");
+        } else if (("MISSING_HATCH".equals(id) || "TOO_MANY_HATCHES".equals(id))
+            && error.get("itemId") instanceof Number) {
+                Item item = Item.getItemById(((Number) error.get("itemId")).intValue());
+                if (item != null) {
+                    int meta = error.get("itemMeta") instanceof Number ? ((Number) error.get("itemMeta")).intValue()
+                        : 0;
+                    String name = new ItemStack(item, 1, meta).getDisplayName();
+                    error.put("hatchName", name);
+                    if ("MISSING_HATCH".equals(id)) {
+                        error.put("reason", "Missing a required hatch or bus: " + name + ".");
+                    } else {
+                        error.put("reason", "Too many '" + name + "' (maximum " + error.get("max") + ").");
+                    }
+                }
+            } else if ("SIMPLE_STRUCTURE_ERROR".equals(id) && error.get("langKey") instanceof String) {
+                String key = (String) error.get("langKey");
+                String translated = StatCollector.translateToLocal(key);
+                if (translated != null && !translated.isEmpty() && !translated.equals(key)) {
+                    error.put("reason", translated);
+                }
+            }
+    }
+
+    private static List<Object> intList(int x, int y, int z) {
+        List<Object> list = new ArrayList<Object>(3);
+        list.add(Integer.valueOf(x));
+        list.add(Integer.valueOf(y));
+        list.add(Integer.valueOf(z));
+        return list;
     }
 
     private static String machineName(Object mte) throws McpToolException {
