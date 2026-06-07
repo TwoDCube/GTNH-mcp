@@ -37,7 +37,8 @@ Notes on the design:
 | --- | --- |
 | `get_target` | Details about the block under your crosshair: name, registry id, metadata, tile entity, and GregTech machine identity. |
 | `diagnose_multiblock` | The headline tool. For the targeted (or specified) GregTech multiblock controller: structure-formed? maintenance problems + which tools fix them, idle/active, recipe progress, efficiency, energy buffer, the in-game scanner lines, and a plain-language summary of likely causes. |
-| `scan_blocks` | Counts every block type in a cube around you (or a point) and lists tile entities (GregTech machines/hatches annotated). Use it to compare what you built against a machine's required structure. |
+| `scan_blocks` | Counts every block type in a cube around you (or a point) and lists tile entities (GregTech machines/hatches annotated). A quick overview of what's nearby. |
+| `read_region` | Returns the **exact** block at every coordinate in a box (id, metadata, display name, GregTech annotation), volume-capped. Use this — not `scan_blocks` — to verify a multiblock cell-by-cell against its required structure. |
 | `get_player` | Position, dimension, health/food, held item, and what you're looking at. |
 | `get_inventory` | Held item, hotbar/main inventory, and armor, with each stack's name, id, count, and metadata. |
 

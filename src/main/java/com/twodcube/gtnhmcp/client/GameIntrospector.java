@@ -269,6 +269,50 @@ public final class GameIntrospector {
         return diagnosis;
     }
 
+    /**
+     * Read every block in an inclusive coordinate box, returning each cell with its <em>exact</em> coordinates. This is
+     * the coordinate-accurate counterpart to {@link #scan} (which only aggregates type counts) and is what lets a
+     * structure be verified cell-by-cell against a known pattern.
+     *
+     * @param min        inclusive minimum corner [x, y, z].
+     * @param max        inclusive maximum corner [x, y, z]; each component must be &gt;= the matching {@code min}.
+     * @param includeAir whether to include air cells (otherwise only non-air cells are returned).
+     * @return the box bounds plus a {@code cells} list, each entry carrying {@code position}, {@code registryName},
+     *         {@code displayName}, {@code metadata}, {@code isAir}, and any GregTech annotation.
+     * @throws McpToolException if no world is loaded. Callers are responsible for bounding the volume.
+     */
+    public Map<String, Object> readRegion(int[] min, int[] max, boolean includeAir) throws McpToolException {
+        World world = requireWorld();
+        List<Object> cells = new ArrayList<Object>();
+        int nonAir = 0;
+        for (int x = min[0]; x <= max[0]; x++) {
+            for (int y = min[1]; y <= max[1]; y++) {
+                if (y < 0 || y > 255) {
+                    continue;
+                }
+                for (int z = min[2]; z <= max[2]; z++) {
+                    boolean air = world.isAirBlock(x, y, z);
+                    if (!air) {
+                        nonAir++;
+                    }
+                    if (air && !includeAir) {
+                        continue;
+                    }
+                    cells.add(describeBlock(world, x, y, z));
+                }
+            }
+        }
+
+        Map<String, Object> result = new LinkedHashMap<String, Object>();
+        result.put("min", intList(min[0], min[1], min[2]));
+        result.put("max", intList(max[0], max[1], max[2]));
+        result.put("dimensionId", Integer.valueOf(world.provider.dimensionId));
+        result.put("totalNonAirBlocks", Integer.valueOf(nonAir));
+        result.put("returnedCells", Integer.valueOf(cells.size()));
+        result.put("cells", cells);
+        return result;
+    }
+
     // ---- shared helpers -------------------------------------------------------------------------------------------
 
     private Map<String, Object> describeBlock(World world, int x, int y, int z) {

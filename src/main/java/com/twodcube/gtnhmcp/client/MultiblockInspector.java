@@ -54,6 +54,7 @@ final class MultiblockInspector {
             m.put("machineName", machineName(mte));
             m.put("isMultiblockController", Boolean.valueOf(isMultiblock));
             m.put("isActive", Boolean.valueOf(Reflect.invokeBoolean(te, "isActive")));
+            m.put("frontFacing", Reflect.invokeString(te, "getFrontFacing"));
             if (isMultiblock) {
                 m.put("structureFormed", Boolean.valueOf(Reflect.getBooleanField(mte, "mMachine")));
             }
@@ -117,6 +118,9 @@ final class MultiblockInspector {
         result.put("isMultiblockController", Boolean.TRUE);
         result.put("structureFormed", Boolean.valueOf(formed));
         result.put("isActive", Boolean.valueOf(active));
+        // The controller's front facing; the structure is checked relative to it, so a wrong facing makes an otherwise
+        // correctly-built shape fail.
+        result.put("frontFacing", Reflect.invokeString(baseTile, "getFrontFacing"));
 
         int repair = Reflect.invokeInt(mte, "getRepairStatus");
         int ideal = Reflect.invokeInt(mte, "getIdealStatus");

@@ -14,6 +14,7 @@ import com.twodcube.gtnhmcp.mcp.tools.DiagnoseMultiblockTool;
 import com.twodcube.gtnhmcp.mcp.tools.GetInventoryTool;
 import com.twodcube.gtnhmcp.mcp.tools.GetPlayerTool;
 import com.twodcube.gtnhmcp.mcp.tools.GetTargetTool;
+import com.twodcube.gtnhmcp.mcp.tools.ReadRegionTool;
 import com.twodcube.gtnhmcp.mcp.tools.ScanBlocksTool;
 
 import cpw.mods.fml.common.event.FMLInitializationEvent;
@@ -32,10 +33,11 @@ public class ClientProxy extends CommonProxy {
 
     /** Guidance returned to the model from MCP {@code initialize}, so it knows what this server is for. */
     private static final String INSTRUCTIONS = "Read-only inspection of a running GregTech New Horizons Minecraft client. Use 'get_target' to identify the "
-        + "block the player is looking at; 'diagnose_multiblock' to find out why a GregTech multiblock is not "
-        + "forming or not running; 'scan_blocks' to list the blocks actually built around a controller and compare "
-        + "them with the required structure; 'get_player' and 'get_inventory' for context. Everything is read-only "
-        + "and only returns data while the player is in a world.";
+        + "block the player is looking at (includes a GregTech controller's front facing); 'diagnose_multiblock' to "
+        + "find out why a GregTech multiblock is not forming or not running; 'scan_blocks' to tally block types around "
+        + "a controller; 'read_region' to read the EXACT block at every coordinate in a box (use this, not scan_blocks, "
+        + "to verify a structure cell-by-cell against its required pattern); 'get_player' and 'get_inventory' for "
+        + "context. Everything is read-only and only returns data while the player is in a world.";
 
     private McpHttpServer server;
 
@@ -54,6 +56,7 @@ public class ClientProxy extends CommonProxy {
         registry.register(new GetTargetTool(executor, introspector));
         registry.register(new DiagnoseMultiblockTool(executor, introspector));
         registry.register(new ScanBlocksTool(executor, introspector));
+        registry.register(new ReadRegionTool(executor, introspector));
         registry.register(new GetPlayerTool(executor, introspector));
         registry.register(new GetInventoryTool(executor, introspector));
 

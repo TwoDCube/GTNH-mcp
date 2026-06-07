@@ -89,6 +89,10 @@ class MultiblockInspectorTest {
         public String[] getInfoData() {
             return infoData;
         }
+
+        public String getFrontFacing() {
+            return "NORTH";
+        }
     }
 
     @Test
