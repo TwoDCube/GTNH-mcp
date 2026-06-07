@@ -41,13 +41,10 @@ public final class DiagnoseMultiblockTool extends AbstractIntrospectionTool {
     public String description() {
         return "Diagnoses a GregTech multiblock controller and explains why it is or isn't working. Targets the "
             + "controller the player is looking at, or the controller at an explicit position. Reports: whether the "
-            + "structure is formed and, when it isn't, GregTech's exact structure errors (e.g. missing maintenance/"
-            + "muffler/output hatch, too few casings, or a wrong block at specific coordinates) via the 'structureErrors' "
-            + "list; how many maintenance problems exist and which tools fix them; whether the machine is active or idle; "
-            + "recipe progress; efficiency; the controller energy buffer; and the in-game scanner text, plus a "
-            + "plain-language summary. Use this for 'why is my multiblock not forming / not running / idle'. The exact "
-            + "structure errors sync to the client while the controller GUI is open; if 'structureErrors' is empty for an "
-            + "unformed multi, ask the player to open the controller GUI, then re-run.";
+            + "structure is formed, how many maintenance problems exist and which tools fix them, whether the machine is "
+            + "active or idle, recipe progress, efficiency, the controller energy buffer, and the in-game scanner text, "
+            + "plus a plain-language summary. Use this for 'why is my multiblock not forming / not running / idle'. If "
+            + "the structure is not formed, follow up with scan_blocks to compare the built blocks to the required shape.";
     }
 
     @Override

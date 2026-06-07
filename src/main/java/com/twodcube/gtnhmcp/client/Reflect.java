@@ -178,46 +178,21 @@ final class Reflect {
         }
     }
 
-    /**
-     * Read any field (including non-public, e.g. GregTech's private {@code structureErrors} list) as an object.
-     *
-     * @param target receiver object.
-     * @param field  field name.
-     * @return the field value (may be null).
-     * @throws McpToolException if the field is missing or inaccessible.
-     */
-    static Object getObjectField(Object target, String field) throws McpToolException {
-        try {
-            return resolveField(target.getClass(), field).get(target);
-        } catch (IllegalAccessException e) {
-            throw new McpToolException(
-                "Cannot access field '" + field
-                    + "' on "
-                    + target.getClass()
-                        .getName(),
-                e);
-        }
-    }
-
     private static Field resolveField(Class<?> type, String name) throws McpToolException {
         String key = type.getName() + "." + name;
         Field cached = FIELD_CACHE.get(key);
         if (cached != null) {
             return cached;
         }
-        // Walk the class hierarchy with getDeclaredField so we can reach private/inherited fields (getField only sees
-        // public ones). This is what lets us read the private `structureErrors` declared on MTEMultiBlockBase.
-        for (Class<?> c = type; c != null; c = c.getSuperclass()) {
-            try {
-                Field f = c.getDeclaredField(name);
-                f.setAccessible(true);
-                FIELD_CACHE.put(key, f);
-                return f;
-            } catch (NoSuchFieldException ignored) {
-                // Try the superclass.
-            }
+        try {
+            Field f = type.getField(name);
+            f.setAccessible(true);
+            FIELD_CACHE.put(key, f);
+            return f;
+        } catch (NoSuchFieldException e) {
+            throw new McpToolException(
+                "Incompatible GregTech version: field '" + name + "' not found on " + type.getName(),
+                e);
         }
-        throw new McpToolException(
-            "Incompatible GregTech version: field '" + name + "' not found on " + type.getName());
     }
 }
